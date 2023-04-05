@@ -72,6 +72,15 @@ async function parseJsonFile<OutputSchema extends z.ZodType>(file: string, schem
 
 const parsePackageJson = (file: string): Promise<PackageJson> => parseJsonFile(file, z.any())
 
+type DepGraph = Record<string, string[]>
+
+function ancestors(from: string, dependencyGraph: DepGraph): string[] {
+	return [
+		...dependencyGraph[from],
+		...dependencyGraph[from].flatMap(dep => ancestors(dep, dependencyGraph))
+	]
+}
+
 async function main() {
 	const root = process.cwd()
 
@@ -87,7 +96,7 @@ async function main() {
 		pkg
 	})
 
-	const bumps = await Promise.all(
+	const workspaceDetails = await Promise.all(
 		Array.from(
 			workspaces,
 			async ([ workspaceName, workspaceRoot ]) => {
@@ -99,18 +108,43 @@ async function main() {
 					parsePackageJson(path.resolve(workspaceRoot, 'package.json'))
 				])
 
-				const changesetBumpLevel: BumpLevel = Math.max(...commits.map(commitBumpLevel)) ?? BumpLevel.NONE
-
-				const currentVersion = workspacePkg.version
-				const releaseType = formatBumpLevel[changesetBumpLevel]
-				const nextVersion = currentVersion && releaseType ? semver.inc(currentVersion, releaseType) : currentVersion
-
-				return { workspaceName, level: formatBumpLevel[changesetBumpLevel], commits: commits.map(c => c.message), currentVersion, nextVersion}
+				return { workspaceName, workspaceRoot, commits, workspacePkg }
 			}
 		)
 	)
 
-	console.dir(bumps, {depth: null, maxArrayLength: null})
+	const dependencyGraph = Object.fromEntries(workspaceDetails.map(({workspaceName, workspacePkg}) => [
+		workspaceName, [
+		...Object.keys(workspacePkg.dependencies ?? {}).filter(dep => workspaces.has(dep)),
+		...Object.keys(workspacePkg.peerDependencies ?? {}).filter(dep => workspaces.has(dep)),
+		...Object.keys(workspacePkg.devDependencies ?? {}).filter(dep => workspaces.has(dep))
+	]]))
+
+	const bumps = Object.fromEntries(workspaceDetails.map(({ commits, workspacePkg, workspaceName }) => {
+		const changesetBumpLevel: BumpLevel = Math.max(BumpLevel.NONE, ...commits.map(commitBumpLevel))
+
+		return [ workspaceName, changesetBumpLevel ]
+	}))
+
+	for(const {workspaceName} of workspaceDetails) {
+		const workspaceAncestors = new Set(ancestors(workspaceName, dependencyGraph))
+		console.log({workspaceName, workspaceAncestors})
+		if(Array.from(workspaceAncestors).some(ancestor => bumps[ancestor] > BumpLevel.NONE)) {
+			bumps[workspaceName] = Math.max(BumpLevel.PATCH, bumps[workspaceName])
+		}
+	}
+
+	for(const {workspaceName, workspacePkg} of workspaceDetails) {
+		const bump = bumps[workspaceName]
+		if(bump > BumpLevel.NONE) {
+			// TODO reduce level if major is zero
+			const currentVersion = workspacePkg.version
+			const releaseType = formatBumpLevel[bump]
+			const nextVersion = currentVersion && releaseType ? semver.inc(currentVersion, releaseType) : currentVersion
+
+			console.log({workspaceName, currentVersion, nextVersion, releaseType})
+		}
+	}
 }
 
 main()
