@@ -8,6 +8,13 @@ const enum BumpLevel {
 	MAJOR
 }
 
+const formatBumpLevel: Record<BumpLevel, string> = {
+	[BumpLevel.NONE]: 'none',
+	[BumpLevel.PATCH]: 'patch',
+	[BumpLevel.MINOR]: 'minor',
+	[BumpLevel.MAJOR]: 'major',
+}
+
 async function commitsSince(git: SimpleGit, sha: string) {
 	const { all } = await git.log({
 		from: sha,
@@ -43,10 +50,14 @@ const commitBumpLevel = (commit: DefaultLogFields & ListLogLine): BumpLevel => {
 
 async function main() {
 	const git = simpleGit('/Users/kara.brightwell/Code/financial-times/cp-content-pipeline')
-
 	const commits = await commitsSince(git, 'ce562a1')
 
-	console.log(commits.map(commitBumpLevel))
+	const changesetBumpLevel: BumpLevel = Math.max(...commits.map(commitBumpLevel))
+
+	console.log({
+		commits: commits.map(commit => commit.message),
+		level: formatBumpLevel[changesetBumpLevel]
+	})
 }
 
 main()
