@@ -116,7 +116,6 @@ async function main() {
 	const dependencyGraph = Object.fromEntries(workspaceDetails.map(({workspaceName, workspacePkg}) => [
 		workspaceName, [
 		...Object.keys(workspacePkg.dependencies ?? {}),
-		...Object.keys(workspacePkg.peerDependencies ?? {}),
 		...Object.keys(workspacePkg.devDependencies ?? {})
 	].filter(dep => workspaces.has(dep))]))
 
