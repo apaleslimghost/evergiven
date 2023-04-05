@@ -1,5 +1,8 @@
 import simpleGit, { DefaultLogFields, ListLogLine, SimpleGit } from "simple-git";
 import * as conventionalCommits from "@conventional-commits/parser";
+import mapWorkspaces from '@npmcli/map-workspaces'
+import fs from 'fs/promises'
+import path from "path";
 
 const enum BumpLevel {
 	NONE = 0,
@@ -15,11 +18,12 @@ const formatBumpLevel: Record<BumpLevel, string> = {
 	[BumpLevel.MAJOR]: 'major',
 }
 
-async function commitsSince(git: SimpleGit, sha: string) {
+async function commitsSince(git: SimpleGit, root: string, sha: string) {
 	const { all } = await git.log({
 		from: sha,
 		multiLine: true,
-		'--topo-order': null
+		'--topo-order': null,
+		file: root
 	})
 
 	return all
@@ -49,15 +53,30 @@ const commitBumpLevel = (commit: DefaultLogFields & ListLogLine): BumpLevel => {
 }
 
 async function main() {
-	const git = simpleGit('/Users/kara.brightwell/Code/financial-times/cp-content-pipeline')
-	const commits = await commitsSince(git, 'ce562a1')
+	const root = '/Users/kara.brightwell/Code/financial-times/cp-content-pipeline'
+	const since = '2e23e05'
 
-	const changesetBumpLevel: BumpLevel = Math.max(...commits.map(commitBumpLevel))
+	const git = simpleGit(root)
 
-	console.log({
-		commits: commits.map(commit => commit.message),
-		level: formatBumpLevel[changesetBumpLevel]
+	const workspaces = await mapWorkspaces({
+		cwd: root,
+		pkg: JSON.parse(await fs.readFile(path.resolve(root, 'package.json'), 'utf-8'))
 	})
+
+	const bumps = await Promise.all(
+		Array.from(
+			workspaces,
+			async ([ workspaceName, workspaceRoot ]) => {
+				const commits = await commitsSince(git, workspaceRoot, since)
+
+				const changesetBumpLevel: BumpLevel = Math.max(...commits.map(commitBumpLevel))
+
+				return [workspaceName, formatBumpLevel[changesetBumpLevel]]
+			}
+		)
+	)
+
+	console.log(bumps)
 }
 
 main()
