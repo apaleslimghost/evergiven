@@ -4,7 +4,9 @@ import mapWorkspaces from '@npmcli/map-workspaces'
 import fs from 'fs/promises'
 import path from "path";
 import z from 'zod'
-import { PackageJson } from "@npmcli/package-json";
+import type { PackageJson } from "@npmcli/package-json";
+import semver from 'semver'
+import { ReleaseType } from "semver";
 
 const ManifestSchema = z.object({
 	lastRelease: z.string()
@@ -17,8 +19,8 @@ const enum BumpLevel {
 	MAJOR
 }
 
-const formatBumpLevel: Record<BumpLevel, string> = {
-	[BumpLevel.NONE]: 'none',
+const formatBumpLevel: Record<BumpLevel, ReleaseType | undefined> = {
+	[BumpLevel.NONE]: undefined,
 	[BumpLevel.PATCH]: 'patch',
 	[BumpLevel.MINOR]: 'minor',
 	[BumpLevel.MAJOR]: 'major',
@@ -89,10 +91,21 @@ async function main() {
 		Array.from(
 			workspaces,
 			async ([ workspaceName, workspaceRoot ]) => {
-				const commits = await commitsSince(git, workspaceRoot, manifest.lastRelease)
+				const [
+					commits,
+					workspacePkg
+				] = await Promise.all([
+					commitsSince(git, workspaceRoot, manifest.lastRelease),
+					parsePackageJson(path.resolve(workspaceRoot, 'package.json'))
+				])
+
 				const changesetBumpLevel: BumpLevel = Math.max(...commits.map(commitBumpLevel)) ?? BumpLevel.NONE
 
-				return { workspaceName, level: formatBumpLevel[changesetBumpLevel], commits: commits.map(c => c.message)}
+				const currentVersion = workspacePkg.version
+				const releaseType = formatBumpLevel[changesetBumpLevel]
+				const nextVersion = currentVersion && releaseType ? semver.inc(currentVersion, releaseType) : currentVersion
+
+				return { workspaceName, level: formatBumpLevel[changesetBumpLevel], commits: commits.map(c => c.message), currentVersion, nextVersion}
 			}
 		)
 	)

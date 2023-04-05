@@ -21,11 +21,13 @@
     "@tsconfig/node16": "^1.0.3",
     "@types/node": "^18.15.11",
     "@types/npmcli__map-workspaces": "^3.0.0",
+    "@types/semver": "^7.3.13",
     "typescript": "^5.0.3"
   },
   "dependencies": {
     "@conventional-commits/parser": "^0.4.1",
     "@npmcli/map-workspaces": "^3.0.3",
+    "semver": "^7.3.8",
     "simple-git": "^3.17.0",
     "zod": "^3.21.4"
   }
