@@ -115,10 +115,10 @@ async function main() {
 
 	const dependencyGraph = Object.fromEntries(workspaceDetails.map(({workspaceName, workspacePkg}) => [
 		workspaceName, [
-		...Object.keys(workspacePkg.dependencies ?? {}).filter(dep => workspaces.has(dep)),
-		...Object.keys(workspacePkg.peerDependencies ?? {}).filter(dep => workspaces.has(dep)),
-		...Object.keys(workspacePkg.devDependencies ?? {}).filter(dep => workspaces.has(dep))
-	]]))
+		...Object.keys(workspacePkg.dependencies ?? {}),
+		...Object.keys(workspacePkg.peerDependencies ?? {}),
+		...Object.keys(workspacePkg.devDependencies ?? {})
+	].filter(dep => workspaces.has(dep))]))
 
 	const bumps = Object.fromEntries(workspaceDetails.map(({ commits, workspacePkg, workspaceName }) => {
 		const changesetBumpLevel: BumpLevel = Math.max(BumpLevel.NONE, ...commits.map(commitBumpLevel))
