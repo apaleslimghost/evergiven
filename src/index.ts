@@ -146,7 +146,7 @@ async function main() {
 		let bump = bumps[workspaceName]
 
 		// force a patch bump if dependents need bumping
-		if (bump > BumpLevel.NONE && Array.from(workspaceAncestors).some(ancestor => bumps[ancestor] > BumpLevel.NONE)) {
+		if (bump === BumpLevel.NONE && Array.from(workspaceAncestors).some(ancestor => bumps[ancestor] > BumpLevel.NONE)) {
 			bump = BumpLevel.PATCH
 		}
 
