@@ -126,16 +126,15 @@ async function main() {
 		return [ workspaceName, changesetBumpLevel ]
 	}))
 
-	for(const {workspaceName} of workspaceDetails) {
+	for(const {workspaceName, workspacePkg} of workspaceDetails) {
 		const workspaceAncestors = new Set(ancestors(workspaceName, dependencyGraph))
 
 		if(Array.from(workspaceAncestors).some(ancestor => bumps[ancestor] > BumpLevel.NONE)) {
 			bumps[workspaceName] = Math.max(BumpLevel.PATCH, bumps[workspaceName])
 		}
-	}
 
-	for(const {workspaceName, workspacePkg} of workspaceDetails) {
 		const bump = bumps[workspaceName]
+
 		if(bump > BumpLevel.NONE) {
 			// TODO reduce level if major is zero
 			const currentVersion = workspacePkg.version
