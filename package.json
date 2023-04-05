@@ -1,0 +1,24 @@
+{
+  "name": "evergiven",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Financial-Times/evergiven.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Financial-Times/evergiven/issues"
+  },
+  "homepage": "https://github.com/Financial-Times/evergiven#readme",
+  "devDependencies": {
+    "@tsconfig/node16": "^1.0.3",
+    "typescript": "^5.0.3"
+  }
+}
