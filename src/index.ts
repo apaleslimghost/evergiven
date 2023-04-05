@@ -30,23 +30,27 @@ async function commitsSince(git: SimpleGit, root: string, sha: string) {
 }
 
 const commitBumpLevel = (commit: DefaultLogFields & ListLogLine): BumpLevel => {
-	if(commit.message.startsWith('Merge ')) {
-		return BumpLevel.NONE
-	}
+	try {
+		const ast = conventionalCommits.parser(commit.body)
+		const {type, notes} = conventionalCommits.toConventionalChangelogFormat(ast)
 
-	const ast = conventionalCommits.parser(commit.body)
-	const {type} = conventionalCommits.toConventionalChangelogFormat(ast)
+		if(notes.length && notes.some(note => note.title === 'BREAKING CHANGE')) {
+			return BumpLevel.MAJOR
+		}
 
-	if(type.endsWith('!')) {
-		return BumpLevel.MAJOR
-	}
+		if(commit.body.match(/breaking/i)) {
+			console.log(commit)
+		}
 
-	if(type === 'feat') {
-		return BumpLevel.MINOR
-	}
+		if(type === 'feat') {
+			return BumpLevel.MINOR
+		}
 
-	if(type === 'fix') {
-		return BumpLevel.PATCH
+		if(type === 'fix') {
+			return BumpLevel.PATCH
+		}
+	} catch(error) {
+		// console.log({error, commit})
 	}
 
 	return BumpLevel.NONE
@@ -54,7 +58,7 @@ const commitBumpLevel = (commit: DefaultLogFields & ListLogLine): BumpLevel => {
 
 async function main() {
 	const root = '/Users/kara.brightwell/Code/financial-times/cp-content-pipeline'
-	const since = '2e23e05'
+	const since = '343758b5d4dd9e63ad4c37b3a4770cb5a95f2aa3'
 
 	const git = simpleGit(root)
 
@@ -71,12 +75,12 @@ async function main() {
 
 				const changesetBumpLevel: BumpLevel = Math.max(...commits.map(commitBumpLevel))
 
-				return [workspaceName, formatBumpLevel[changesetBumpLevel]]
+				return { workspaceName, level: formatBumpLevel[changesetBumpLevel], commits: commits.map(c => c.message)}
 			}
 		)
 	)
 
-	console.log(bumps)
+	console.dir(bumps, {depth: null, maxArrayLength: null})
 }
 
 main()
