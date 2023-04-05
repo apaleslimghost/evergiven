@@ -128,12 +128,8 @@ async function main() {
 
 	for(const {workspaceName, workspacePkg} of workspaceDetails) {
 		const workspaceAncestors = new Set(ancestors(workspaceName, dependencyGraph))
-
-		if(Array.from(workspaceAncestors).some(ancestor => bumps[ancestor] > BumpLevel.NONE)) {
-			bumps[workspaceName] = Math.max(BumpLevel.PATCH, bumps[workspaceName])
-		}
-
-		const bump = bumps[workspaceName]
+		const ancestorBump = Array.from(workspaceAncestors).some(ancestor => bumps[ancestor] > BumpLevel.NONE) ? BumpLevel.PATCH : BumpLevel.NONE
+		const bump: BumpLevel = Math.max(bumps[workspaceName], ancestorBump)
 
 		if(bump > BumpLevel.NONE) {
 			// TODO reduce level if major is zero
