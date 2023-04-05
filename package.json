@@ -26,6 +26,7 @@
   "dependencies": {
     "@conventional-commits/parser": "^0.4.1",
     "@npmcli/map-workspaces": "^3.0.3",
-    "simple-git": "^3.17.0"
+    "simple-git": "^3.17.0",
+    "zod": "^3.21.4"
   }
 }

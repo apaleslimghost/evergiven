@@ -3,6 +3,11 @@ import * as conventionalCommits from "@conventional-commits/parser";
 import mapWorkspaces from '@npmcli/map-workspaces'
 import fs from 'fs/promises'
 import path from "path";
+import z from 'zod'
+
+const ManifestSchema = z.object({
+	lastRelease: z.string()
+})
 
 const enum BumpLevel {
 	NONE = 0,
@@ -56,9 +61,13 @@ const commitBumpLevel = (commit: DefaultLogFields & ListLogLine): BumpLevel => {
 	return BumpLevel.NONE
 }
 
+
 async function main() {
-	const root = '/Users/kara.brightwell/Code/financial-times/cp-content-pipeline'
-	const since = '343758b5d4dd9e63ad4c37b3a4770cb5a95f2aa3'
+	const root = process.cwd()
+
+	const {lastRelease} = ManifestSchema.parse(JSON.parse(await fs.readFile(path.resolve(root, '.evergiven-manifest.json'), 'utf-8')))
+
+	console.log(lastRelease)
 
 	const git = simpleGit(root)
 
@@ -71,9 +80,9 @@ async function main() {
 		Array.from(
 			workspaces,
 			async ([ workspaceName, workspaceRoot ]) => {
-				const commits = await commitsSince(git, workspaceRoot, since)
+				const commits = await commitsSince(git, workspaceRoot, lastRelease)
 
-				const changesetBumpLevel: BumpLevel = Math.max(...commits.map(commitBumpLevel))
+				const changesetBumpLevel: BumpLevel = Math.max(...commits.map(commitBumpLevel)) ?? BumpLevel.NONE
 
 				return { workspaceName, level: formatBumpLevel[changesetBumpLevel], commits: commits.map(c => c.message)}
 			}
