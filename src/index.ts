@@ -74,11 +74,27 @@ const parsePackageJson = (file: string): Promise<PackageJson> => parseJsonFile(f
 
 type DepGraph = Record<string, string[]>
 
-function ancestors(from: string, dependencyGraph: DepGraph): string[] {
-	return [
-		...dependencyGraph[from],
-		...dependencyGraph[from].flatMap(dep => ancestors(dep, dependencyGraph))
-	]
+function ancestors (from: string, dependencyGraph: DepGraph): Set<string> {
+	function ancestorsInner(from: string, dependencyGraph: DepGraph): string[] {
+		return [
+			...dependencyGraph[from],
+			...dependencyGraph[from].flatMap(dep => ancestorsInner(dep, dependencyGraph))
+		]
+	}
+
+	return new Set(ancestorsInner(from, dependencyGraph))
+}
+
+function setDependencyVersionIfPresent(pkg: PackageJson, dependency: string, version: string) {
+	for(const dependencyType of ['dependencies', 'devDependencies'] as const) {
+		const deps = pkg[dependencyType]
+
+		if(deps && deps[dependency]) {
+			const currentVersion = deps[dependency]
+			const extractVersion = semver.minVersion(currentVersion)?.format() ?? currentVersion
+			deps[dependency] = deps[dependency].replace(extractVersion, version)
+		}
+	}
 }
 
 async function main() {
@@ -125,18 +141,37 @@ async function main() {
 		return [ workspaceName, changesetBumpLevel ]
 	}))
 
-	for(const {workspaceName, workspacePkg} of workspaceDetails) {
-		const workspaceAncestors = new Set(ancestors(workspaceName, dependencyGraph))
-		const ancestorBump = Array.from(workspaceAncestors).some(ancestor => bumps[ancestor] > BumpLevel.NONE) ? BumpLevel.PATCH : BumpLevel.NONE
-		const bump: BumpLevel = Math.max(bumps[workspaceName], ancestorBump)
+	const packageActions = Object.fromEntries(workspaceDetails.flatMap(({workspaceName, workspacePkg}) => {
+		const workspaceAncestors = ancestors(workspaceName, dependencyGraph)
+		let bump = bumps[workspaceName]
+
+		// force a patch bump if dependents need bumping
+		if (bump > BumpLevel.NONE && Array.from(workspaceAncestors).some(ancestor => bumps[ancestor] > BumpLevel.NONE)) {
+			bump = BumpLevel.PATCH
+		}
 
 		if(bump > BumpLevel.NONE) {
 			// TODO reduce level if major is zero
-			const currentVersion = workspacePkg.version
+			const currentVersion = workspacePkg.version!
 			const releaseType = formatBumpLevel[bump]
-			const nextVersion = currentVersion && releaseType ? semver.inc(currentVersion, releaseType) : currentVersion
+			const nextVersion = currentVersion && releaseType ? semver.inc(currentVersion, releaseType)! : currentVersion
 
-			console.log({workspaceName, currentVersion, nextVersion, releaseType})
+			return [[workspaceName, {workspaceName, currentVersion, nextVersion, releaseType}]]
+		}
+
+		return []
+	}))
+
+	for(const {workspaceName, workspacePkg} of workspaceDetails) {
+		if(packageActions[workspaceName]) {
+			const {nextVersion} = packageActions[workspaceName]
+			workspacePkg.version = nextVersion
+
+			for(const dependency of dependencyGraph[workspaceName]) {
+				setDependencyVersionIfPresent(workspacePkg, dependency, packageActions[dependency].nextVersion)
+			}
+
+			console.log(workspacePkg)
 		}
 	}
 }
