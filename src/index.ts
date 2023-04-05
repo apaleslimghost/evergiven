@@ -128,7 +128,7 @@ async function main() {
 
 	for(const {workspaceName} of workspaceDetails) {
 		const workspaceAncestors = new Set(ancestors(workspaceName, dependencyGraph))
-		console.log({workspaceName, workspaceAncestors})
+
 		if(Array.from(workspaceAncestors).some(ancestor => bumps[ancestor] > BumpLevel.NONE)) {
 			bumps[workspaceName] = Math.max(BumpLevel.PATCH, bumps[workspaceName])
 		}
