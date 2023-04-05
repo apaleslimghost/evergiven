@@ -176,4 +176,17 @@ async function main() {
 	}
 }
 
+// TODO
+// generating the changelog
+// writing latest commit to manifest
+// writing and committing the package.json, changelogs and manifest
+// creating PR
+// creating releases on merge
+// overriding commit types for commit SHAs in manifest, deleting them when they've been used
+// CLI args?
+// tests
+// docs
+// Tool Kit plugin?
+// 🔮
+
 main()
