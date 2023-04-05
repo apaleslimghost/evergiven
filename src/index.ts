@@ -4,6 +4,7 @@ import mapWorkspaces from '@npmcli/map-workspaces'
 import fs from 'fs/promises'
 import path from "path";
 import z from 'zod'
+import { PackageJson } from "@npmcli/package-json";
 
 const ManifestSchema = z.object({
 	lastRelease: z.string()
@@ -61,27 +62,34 @@ const commitBumpLevel = (commit: DefaultLogFields & ListLogLine): BumpLevel => {
 	return BumpLevel.NONE
 }
 
+async function parseJsonFile<OutputSchema extends z.ZodType>(file: string, schema: OutputSchema): Promise<z.infer<OutputSchema>> {
+	const content = await fs.readFile(file, 'utf8')
+	const data = JSON.parse(content)
+	return schema.parse(data)
+}
+
+const parsePackageJson = (file: string): Promise<PackageJson> => parseJsonFile(file, z.any())
 
 async function main() {
 	const root = process.cwd()
 
-	const {lastRelease} = ManifestSchema.parse(JSON.parse(await fs.readFile(path.resolve(root, '.evergiven-manifest.json'), 'utf-8')))
-
-	console.log(lastRelease)
+	const [manifest, pkg] = await Promise.all([
+		parseJsonFile(path.resolve(root, '.evergiven-manifest.json'), ManifestSchema),
+		parsePackageJson(path.resolve(root, 'package.json'))
+	])
 
 	const git = simpleGit(root)
 
 	const workspaces = await mapWorkspaces({
 		cwd: root,
-		pkg: JSON.parse(await fs.readFile(path.resolve(root, 'package.json'), 'utf-8'))
+		pkg
 	})
 
 	const bumps = await Promise.all(
 		Array.from(
 			workspaces,
 			async ([ workspaceName, workspaceRoot ]) => {
-				const commits = await commitsSince(git, workspaceRoot, lastRelease)
-
+				const commits = await commitsSince(git, workspaceRoot, manifest.lastRelease)
 				const changesetBumpLevel: BumpLevel = Math.max(...commits.map(commitBumpLevel)) ?? BumpLevel.NONE
 
 				return { workspaceName, level: formatBumpLevel[changesetBumpLevel], commits: commits.map(c => c.message)}
