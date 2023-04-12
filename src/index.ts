@@ -122,6 +122,8 @@ type PackageAction = {
 	nextVersion: string,
 }
 
+type PackageActions = Record<string, PackageAction>
+
 function mapMap<K, A, B>(input: Map<K, A>, fn: (item: A, key: K) => B): Map<K, B> {
 	const output = new Map<K, B>
 
@@ -139,6 +141,35 @@ async function promiseAllMap<K, V>(promises: Map<K, Promise<V>>): Promise<Map<K,
 			async ([key, value]) => [key, await value] as const
 		)
 	))
+}
+
+function determinePackageAction(previousActions: PackageActions, { commits, workspaceDeps, packageJson }: Package): PackageAction | undefined {
+	const dependenciesBumped = workspaceDeps.some(dep => dep in previousActions)
+
+	const bumpLevel: BumpLevel = Math.max(
+		dependenciesBumped ? BumpLevel.PATCH : BumpLevel.NONE,
+		...commits.map(commitBumpLevel),
+	)
+
+	if(bumpLevel > BumpLevel.NONE) {
+		// TODO reduce level if major is zero
+		const currentVersion = packageJson.version!
+		const releaseType = formatBumpLevel[bumpLevel]
+		const nextVersion = currentVersion && releaseType ? semver.inc(currentVersion, releaseType)! : currentVersion
+
+		const action = { bumpLevel, nextVersion }
+
+		packageJson.version = nextVersion
+
+		for(const dependency of workspaceDeps) {
+			const dependencyAction = previousActions[dependency]
+			if(dependencyAction) {
+				setDependencyVersionIfPresent(packageJson, dependency, dependencyAction.nextVersion)
+			}
+		}
+
+		return action
+	}
 }
 
 async function main() {
@@ -173,42 +204,26 @@ async function main() {
 
 	const dependencyOrder = toposort(dependencyGraph)
 
-	const actions: Record<string, PackageAction> = {}
+	const actions: PackageActions = dependencyOrder.reduce(
+		(actions, pkgName) => {
+			const details = workspaceDetails.get(pkgName)
+			if(details) {
+				const action = determinePackageAction(actions, details)
 
-	for(const pkg of dependencyOrder) {
-		const details = workspaceDetails.get(pkg)
-
-		if(details) {
-			const { commits, workspaceDeps, packageJson } = details
-
-			const dependenciesBumped = workspaceDeps.some(dep => dep in actions)
-
-			const bumpLevel: BumpLevel = Math.max(
-				dependenciesBumped ? BumpLevel.PATCH : BumpLevel.NONE,
-				...commits.map(commitBumpLevel),
-			)
-
-			if(bumpLevel > BumpLevel.NONE) {
-				// TODO reduce level if major is zero
-				const currentVersion = packageJson.version!
-				const releaseType = formatBumpLevel[bumpLevel]
-				const nextVersion = currentVersion && releaseType ? semver.inc(currentVersion, releaseType)! : currentVersion
-
-				const action = { bumpLevel, nextVersion }
-
-				packageJson.version = nextVersion
-
-				for(const dependency of workspaceDeps) {
-					const dependencyAction = actions[dependency]
-					if(dependencyAction) {
-						setDependencyVersionIfPresent(packageJson, dependency, dependencyAction.nextVersion)
+				if(action) {
+					return {
+						...actions,
+						[pkgName]: action
 					}
 				}
-
-				actions[pkg] = action
 			}
-		}
-	}
+
+			return actions
+		},
+		{}
+	)
+
+	console.log(actions)
 }
 
 // TODO
