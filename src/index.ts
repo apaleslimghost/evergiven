@@ -73,7 +73,7 @@ async function parseJsonFile<OutputSchema extends z.ZodType>(file: string, schem
 
 const parsePackageJson = (file: string): Promise<PackageJson> => parseJsonFile(file, z.any())
 
-function setDependencyVersionIfPresent(pkg: PackageJson, dependency: string, version: string) {
+const setDependencyVersionIfPresent = (dependency: string, version: string): PackageJsonChange => pkg => {
 	for(const dependencyType of ['dependencies', 'devDependencies'] as const) {
 		const deps = pkg[dependencyType]
 
@@ -120,9 +120,12 @@ async function loadPackage(root: string, {git, manifest, workspaces}: Context): 
 type PackageBump = {
 	bumpLevel: BumpLevel,
 	nextVersion: string,
+	changes: PackageJsonChange[]
 }
 
 type PackageBumps = Record<string, PackageBump>
+
+type PackageJsonChange = (json: PackageJson) => void
 
 function mapMap<K, A, B>(input: Map<K, A>, fn: (item: A, key: K) => B): Map<K, B> {
 	const output = new Map<K, B>
@@ -157,14 +160,19 @@ function determinePackageBump(previousBumps: PackageBumps, { commits, workspaceD
 		const releaseType = formatBumpLevel[bumpLevel]
 		const nextVersion = currentVersion && releaseType ? semver.inc(currentVersion, releaseType)! : currentVersion
 
-		const bump = { bumpLevel, nextVersion }
+		const bump: PackageBump = { bumpLevel, nextVersion, changes: [] }
 
-		packageJson.version = nextVersion
+		bump.changes.push(
+			json => json.version = nextVersion
+		)
 
 		for(const dependency of workspaceDeps) {
 			const dependencyBump = previousBumps[dependency]
+
 			if(dependencyBump) {
-				setDependencyVersionIfPresent(packageJson, dependency, dependencyBump.nextVersion)
+				bump.changes.push(
+					setDependencyVersionIfPresent(dependency, dependencyBump.nextVersion)
+				)
 			}
 		}
 
