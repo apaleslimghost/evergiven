@@ -117,12 +117,12 @@ async function loadPackage(root: string, {git, manifest, workspaces}: Context): 
 	return { commits, packageJson, workspaceDeps }
 }
 
-type PackageAction = {
+type PackageBump = {
 	bumpLevel: BumpLevel,
 	nextVersion: string,
 }
 
-type PackageActions = Record<string, PackageAction>
+type PackageBumps = Record<string, PackageBump>
 
 function mapMap<K, A, B>(input: Map<K, A>, fn: (item: A, key: K) => B): Map<K, B> {
 	const output = new Map<K, B>
@@ -143,8 +143,8 @@ async function promiseAllMap<K, V>(promises: Map<K, Promise<V>>): Promise<Map<K,
 	))
 }
 
-function determinePackageAction(previousActions: PackageActions, { commits, workspaceDeps, packageJson }: Package): PackageAction | undefined {
-	const dependenciesBumped = workspaceDeps.some(dep => dep in previousActions)
+function determinePackageBump(previousBumps: PackageBumps, { commits, workspaceDeps, packageJson }: Package): PackageBump | undefined {
+	const dependenciesBumped = workspaceDeps.some(dep => dep in previousBumps)
 
 	const bumpLevel: BumpLevel = Math.max(
 		dependenciesBumped ? BumpLevel.PATCH : BumpLevel.NONE,
@@ -157,18 +157,18 @@ function determinePackageAction(previousActions: PackageActions, { commits, work
 		const releaseType = formatBumpLevel[bumpLevel]
 		const nextVersion = currentVersion && releaseType ? semver.inc(currentVersion, releaseType)! : currentVersion
 
-		const action = { bumpLevel, nextVersion }
+		const bump = { bumpLevel, nextVersion }
 
 		packageJson.version = nextVersion
 
 		for(const dependency of workspaceDeps) {
-			const dependencyAction = previousActions[dependency]
-			if(dependencyAction) {
-				setDependencyVersionIfPresent(packageJson, dependency, dependencyAction.nextVersion)
+			const dependencyBump = previousBumps[dependency]
+			if(dependencyBump) {
+				setDependencyVersionIfPresent(packageJson, dependency, dependencyBump.nextVersion)
 			}
 		}
 
-		return action
+		return bump
 	}
 }
 
@@ -204,26 +204,26 @@ async function main() {
 
 	const dependencyOrder = toposort(dependencyGraph)
 
-	const actions: PackageActions = dependencyOrder.reduce(
-		(actions, pkgName) => {
+	const bumps: PackageBumps = dependencyOrder.reduce(
+		(bumps, pkgName) => {
 			const details = workspaceDetails.get(pkgName)
 			if(details) {
-				const action = determinePackageAction(actions, details)
+				const bump = determinePackageBump(bumps, details)
 
-				if(action) {
+				if(bump) {
 					return {
-						...actions,
-						[pkgName]: action
+						...bumps,
+						[pkgName]: bump
 					}
 				}
 			}
 
-			return actions
+			return bumps
 		},
 		{}
 	)
 
-	console.log(actions)
+	console.log(bumps)
 }
 
 // TODO
