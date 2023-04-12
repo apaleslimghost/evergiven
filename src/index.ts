@@ -36,7 +36,7 @@ const formatBumpLevel: Record<BumpLevel, ReleaseType | undefined> = {
 	[BumpLevel.MAJOR]: 'major',
 }
 
-async function commitsSince(git: SimpleGit, root: string, sha: string) {
+async function commitsSince(git: SimpleGit, root: string, sha?: string) {
 	const { all } = await git.log({
 		from: sha,
 		multiLine: true,
@@ -94,7 +94,7 @@ const setDependencyVersionIfPresent = (dependency: string, version: string): Pac
 
 type Context = {
 	git: SimpleGit,
-	manifest: Manifest,
+	manifest?: Manifest,
 	workspaces: Map<string, string>
 }
 
@@ -109,7 +109,7 @@ async function loadPackage(root: string, {git, manifest, workspaces}: Context): 
 		commits,
 		packageJson
 	] = await Promise.all([
-		commitsSince(git, root, manifest.lastRelease),
+		commitsSince(git, root, manifest?.lastRelease),
 		parsePackageJson(path.resolve(root, 'package.json'))
 	])
 
@@ -186,7 +186,9 @@ function determinePackageBump(previousBumps: PackageBumps, { commits, workspaceD
 
 async function loadContext(root: string): Promise<Context> {
 	const [manifest, pkg] = await Promise.all([
-		parseJsonFile(path.resolve(root, '.evergiven-manifest.json'), ManifestSchema),
+		parseJsonFile(path.resolve(root, '.evergiven-manifest.json'), ManifestSchema).catch(
+			() => undefined
+		),
 		parsePackageJson(path.resolve(root, 'package.json'))
 	])
 
