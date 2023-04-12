@@ -122,6 +122,25 @@ type PackageAction = {
 	nextVersion: string,
 }
 
+function mapMap<K, A, B>(input: Map<K, A>, fn: (item: A, key: K) => B): Map<K, B> {
+	const output = new Map<K, B>
+
+	for(const [key, item] of input) {
+		output.set(key, fn(item, key))
+	}
+
+	return output
+}
+
+async function promiseAllMap<K, V>(promises: Map<K, Promise<V>>): Promise<Map<K, V>> {
+	return new Map(await Promise.all(
+		Array.from(
+			promises,
+			async ([key, value]) => [key, await value] as const
+		)
+	))
+}
+
 async function main() {
 	const root = process.cwd()
 
@@ -139,18 +158,15 @@ async function main() {
 
 	const context: Context = { manifest, workspaces, git }
 
-	const workspaceDetails = Object.fromEntries(await Promise.all(
-		Array.from(
+	const workspaceDetails = await promiseAllMap(
+		mapMap(
 			workspaces,
-			async ([ workspaceName, workspaceRoot ]) => {
-				const packageDetails = await loadPackage(workspaceRoot, context)
-				return [workspaceName, packageDetails] as const
-			}
+			workspaceRoot => loadPackage(workspaceRoot, context)
 		)
-	))
+	)
 
-	const dependencyGraph = Object.entries(workspaceDetails).flatMap(
-		([workspaceName, {workspaceDeps}]) => (
+	const dependencyGraph = Array.from(workspaceDetails).flatMap(
+		([workspaceName, { workspaceDeps }]) => (
 			workspaceDeps.map((dep): [string, string] => [dep, workspaceName])
 		)
 	)
@@ -160,7 +176,7 @@ async function main() {
 	const actions: Record<string, PackageAction> = {}
 
 	for(const pkg of dependencyOrder) {
-		const details = workspaceDetails[pkg]
+		const details = workspaceDetails.get(pkg)
 
 		if(details) {
 			const { commits, workspaceDeps, packageJson } = details
