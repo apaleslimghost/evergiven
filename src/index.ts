@@ -116,15 +116,18 @@ async function main() {
 				const workspaceDeps = [
 					...Object.keys(workspacePkg.dependencies ?? {}),
 					...Object.keys(workspacePkg.devDependencies ?? {})
-				]
+				].filter(dep => workspaces.has(dep))
 
 				return [workspaceName, { workspaceRoot, commits, workspacePkg, workspaceDeps }] as const
 			}
 		)
 	))
 
-	const dependencyGraph = Object.entries(workspaceDetails).flatMap(([workspaceName, {workspaceDeps}]) =>
-		workspaceDeps.filter(dep => workspaces.has(dep)).map((dep): [string, string] => [dep, workspaceName]))
+	const dependencyGraph = Object.entries(workspaceDetails).flatMap(
+		([workspaceName, {workspaceDeps}]) => (
+			workspaceDeps .map((dep): [string, string] => [dep, workspaceName])
+		)
+	)
 
 	const dependencyOrder = toposort(dependencyGraph)
 
@@ -132,6 +135,7 @@ async function main() {
 
 	for(const pkg of dependencyOrder) {
 		const details = workspaceDetails[pkg]
+
 		if(details) {
 			const { commits, workspacePkg, workspaceDeps } = details
 			const dependenciesBumped = workspaceDeps.some(dep => dep in bumps)
