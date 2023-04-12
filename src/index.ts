@@ -119,6 +119,11 @@ async function loadPackage(root: string, {git, manifest, workspaces}: Context): 
 	return { commits, packageJson, workspaceDeps }
 }
 
+type PackageAction = {
+	bumpLevel: BumpLevel,
+	nextVersion: string,
+}
+
 async function main() {
 	const root = process.cwd()
 
@@ -148,59 +153,53 @@ async function main() {
 
 	const dependencyGraph = Object.entries(workspaceDetails).flatMap(
 		([workspaceName, {workspaceDeps}]) => (
-			workspaceDeps .map((dep): [string, string] => [dep, workspaceName])
+			workspaceDeps.map((dep): [string, string] => [dep, workspaceName])
 		)
 	)
 
 	const dependencyOrder = toposort(dependencyGraph)
 
-	const bumps: Record<string, BumpLevel> = {}
+	const actions: Record<string, PackageAction> = {}
 
 	for(const pkg of dependencyOrder) {
 		const details = workspaceDetails[pkg]
 
-		if(details) {
-			const { commits, workspaceDeps } = details
-			const dependenciesBumped = workspaceDeps.some(dep => dep in bumps)
 
-			bumps[pkg] = Math.max(
+		if(details) {
+			const { commits, workspaceDeps, packageJson } = details
+
+			const dependenciesBumped = workspaceDeps.some(dep => dep in actions)
+
+			const bumpLevel: BumpLevel = Math.max(
 				dependenciesBumped ? BumpLevel.PATCH : BumpLevel.NONE,
 				...commits.map(commitBumpLevel),
 			)
-		}
-	}
 
-	const packageActions = Object.fromEntries(Object.entries(workspaceDetails).flatMap(([workspaceName, {packageJson}]) => {
-		let bump = bumps[workspaceName]
+			if(bumpLevel > BumpLevel.NONE) {
+				// TODO reduce level if major is zero
+				const currentVersion = packageJson.version!
+				const releaseType = formatBumpLevel[bumpLevel]
+				const nextVersion = currentVersion && releaseType ? semver.inc(currentVersion, releaseType)! : currentVersion
 
-		if(bump && bump > BumpLevel.NONE) {
-			// TODO reduce level if major is zero
-			const currentVersion = packageJson.version!
-			const releaseType = formatBumpLevel[bump]
-			const nextVersion = currentVersion && releaseType ? semver.inc(currentVersion, releaseType)! : currentVersion
+				const action = { bumpLevel, nextVersion }
 
-			return [[workspaceName, {workspaceName, currentVersion, nextVersion, releaseType}]]
-		}
+				packageJson.version = nextVersion
 
-		return []
-	}))
-
-	for(const [workspaceName, {packageJson, workspaceDeps}] of Object.entries(workspaceDetails)) {
-		const action = packageActions[workspaceName]
-		if(action) {
-			const {nextVersion} = action
-			packageJson.version = nextVersion
-
-			for(const dependency of workspaceDeps) {
-				const dependencyAction = packageActions[dependency]
-				if(dependencyAction) {
-					setDependencyVersionIfPresent(packageJson, dependency, dependencyAction.nextVersion)
+				for(const dependency of workspaceDeps) {
+					const dependencyAction = actions[dependency]
+					if(dependencyAction) {
+						setDependencyVersionIfPresent(packageJson, dependency, dependencyAction.nextVersion)
+					}
 				}
-			}
 
-			console.log(packageJson)
+				console.log(packageJson)
+
+				actions[pkg] = action
+			}
 		}
 	}
+
+	console.log(actions)
 }
 
 // TODO
