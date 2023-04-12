@@ -76,14 +76,11 @@ const parsePackageJson = (file: string): Promise<PackageJson> => parseJsonFile(f
 const setDependencyVersionIfPresent = (dependency: string, version: string): PackageJsonChange => pkg => {
 	for(const dependencyType of ['dependencies', 'devDependencies'] as const) {
 		const deps = pkg[dependencyType]
+		const currentVersion = deps?.[dependency]
 
-		if(deps && deps[dependency]) {
-			const currentVersion = deps[dependency]
-
-			if(currentVersion) {
-				const extractVersion = semver.minVersion(currentVersion)?.format() ?? currentVersion
-				deps[dependency] = currentVersion.replace(extractVersion, version)
-			}
+		if(currentVersion) {
+			const extractVersion = semver.minVersion(currentVersion)?.format() ?? currentVersion
+			deps[dependency] = currentVersion.replace(extractVersion, version)
 		}
 	}
 }
