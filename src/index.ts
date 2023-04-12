@@ -177,9 +177,7 @@ function determinePackageBump(previousBumps: PackageBumps, { commits, workspaceD
 	}
 }
 
-async function main() {
-	const root = process.cwd()
-
+async function loadContext(root: string): Promise<Context> {
 	const [manifest, pkg] = await Promise.all([
 		parseJsonFile(path.resolve(root, '.evergiven-manifest.json'), ManifestSchema),
 		parsePackageJson(path.resolve(root, 'package.json'))
@@ -192,11 +190,15 @@ async function main() {
 		pkg
 	})
 
-	const context: Context = { manifest, workspaces, git }
+	return { manifest, workspaces, git }
+}
+
+async function main() {
+	const context = await loadContext(process.cwd())
 
 	const workspaceDetails = await promiseAllMap(
 		mapMap(
-			workspaces,
+			context.workspaces,
 			workspaceRoot => loadPackage(workspaceRoot, context)
 		)
 	)
