@@ -15,6 +15,13 @@ const ManifestSchema = z.object({
 
 type Manifest = z.infer<typeof ManifestSchema>
 
+const UsablePackageJsonSchema = z.object({
+	name: z.string(),
+	version: z.string()
+}).and(z.record(z.any()))
+
+type UsablePackageJson = PackageJson & z.infer<typeof UsablePackageJsonSchema>
+
 const enum BumpLevel {
 	NONE = 0,
 	PATCH,
@@ -71,7 +78,7 @@ async function parseJsonFile<OutputSchema extends z.ZodType>(file: string, schem
 	return schema.parse(data)
 }
 
-const parsePackageJson = (file: string): Promise<PackageJson> => parseJsonFile(file, z.any())
+const parsePackageJson = (file: string): Promise<UsablePackageJson> => parseJsonFile(file, UsablePackageJsonSchema)
 
 const setDependencyVersionIfPresent = (dependency: string, version: string): PackageJsonChange => pkg => {
 	for(const dependencyType of ['dependencies', 'devDependencies'] as const) {
@@ -93,7 +100,7 @@ type Context = {
 
 type Package = {
 	commits: readonly Commit[],
-	packageJson: PackageJson,
+	packageJson: UsablePackageJson,
 	workspaceDeps: string[]
 }
 
@@ -153,7 +160,7 @@ function determinePackageBump(previousBumps: PackageBumps, { commits, workspaceD
 
 	if(bumpLevel > BumpLevel.NONE) {
 		// TODO reduce level if major is zero
-		const currentVersion = packageJson.version!
+		const currentVersion = packageJson.version
 		const releaseType = formatBumpLevel[bumpLevel]
 		const nextVersion = currentVersion && releaseType ? semver.inc(currentVersion, releaseType)! : currentVersion
 
@@ -214,6 +221,7 @@ async function main() {
 	const bumps: PackageBumps = dependencyOrder.reduce(
 		(bumps, pkgName) => {
 			const details = workspaceDetails.get(pkgName)
+
 			if(details) {
 				const bump = determinePackageBump(bumps, details)
 
