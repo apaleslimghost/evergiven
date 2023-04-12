@@ -73,8 +73,6 @@ async function parseJsonFile<OutputSchema extends z.ZodType>(file: string, schem
 
 const parsePackageJson = (file: string): Promise<PackageJson> => parseJsonFile(file, z.any())
 
-type DepGraph = Record<string, string[]>
-
 function setDependencyVersionIfPresent(pkg: PackageJson, dependency: string, version: string) {
 	for(const dependencyType of ['dependencies', 'devDependencies'] as const) {
 		const deps = pkg[dependencyType]
@@ -164,7 +162,6 @@ async function main() {
 	for(const pkg of dependencyOrder) {
 		const details = workspaceDetails[pkg]
 
-
 		if(details) {
 			const { commits, workspaceDeps, packageJson } = details
 
@@ -192,14 +189,10 @@ async function main() {
 					}
 				}
 
-				console.log(packageJson)
-
 				actions[pkg] = action
 			}
 		}
 	}
-
-	console.log(actions)
 }
 
 // TODO
