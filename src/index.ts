@@ -140,7 +140,7 @@ async function main() {
 		Array.from(
 			workspaces,
 			async ([ workspaceName, workspaceRoot ]) => {
-				const packageDetails = await loadPackage(root, context)
+				const packageDetails = await loadPackage(workspaceRoot, context)
 				return [workspaceName, packageDetails] as const
 			}
 		)
