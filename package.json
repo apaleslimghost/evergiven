@@ -28,6 +28,8 @@
   "dependencies": {
     "@conventional-commits/parser": "^0.4.1",
     "@npmcli/map-workspaces": "^3.0.3",
+    "@octokit/rest": "^19.0.7",
+    "code-suggester": "^4.3.2",
     "semver": "^7.3.8",
     "simple-git": "^3.17.0",
     "toposort": "^2.0.2",

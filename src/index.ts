@@ -8,6 +8,8 @@ import type { PackageJson } from "@npmcli/package-json";
 import semver from 'semver'
 import { ReleaseType } from "semver";
 import toposort from 'toposort'
+import { Octokit } from "@octokit/rest";
+import * as suggester from 'code-suggester'
 
 const ManifestSchema = z.object({
 	lastRelease: z.string()
@@ -93,12 +95,15 @@ const setDependencyVersionIfPresent = (dependency: string, version: string): Pac
 }
 
 type Context = {
+	commit: string,
+	root: string,
 	git: SimpleGit,
 	manifest?: Manifest,
 	workspaces: Map<string, string>
 }
 
 type Package = {
+	root: string,
 	commits: readonly Commit[],
 	packageJson: UsablePackageJson,
 	workspaceDeps: string[]
@@ -118,10 +123,11 @@ async function loadPackage(root: string, {git, manifest, workspaces}: Context): 
 		...Object.keys(packageJson.devDependencies ?? {})
 	].filter(dep => workspaces.has(dep))
 
-	return { commits, packageJson, workspaceDeps }
+	return { root, commits, packageJson, workspaceDeps }
 }
 
 type PackageBump = {
+	package: Package,
 	bumpLevel: BumpLevel,
 	nextVersion: string,
 	changes: PackageJsonChange[]
@@ -150,7 +156,8 @@ async function promiseAllMap<K, V>(promises: Map<K, Promise<V>>): Promise<Map<K,
 	))
 }
 
-function determinePackageBump(previousBumps: PackageBumps, { commits, workspaceDeps, packageJson }: Package): PackageBump | undefined {
+function determinePackageBump(previousBumps: PackageBumps, pkg: Package): PackageBump | undefined {
+	const { commits, workspaceDeps, packageJson } = pkg
 	const dependenciesBumped = workspaceDeps.some(dep => dep in previousBumps)
 
 	const bumpLevel: BumpLevel = Math.max(
@@ -164,7 +171,7 @@ function determinePackageBump(previousBumps: PackageBumps, { commits, workspaceD
 		const releaseType = formatBumpLevel[bumpLevel]
 		const nextVersion = currentVersion && releaseType ? semver.inc(currentVersion, releaseType)! : currentVersion
 
-		const bump: PackageBump = { bumpLevel, nextVersion, changes: [] }
+		const bump: PackageBump = { package: pkg, bumpLevel, nextVersion, changes: [] }
 
 		bump.changes.push(
 			json => json.version = nextVersion
@@ -194,12 +201,57 @@ async function loadContext(root: string): Promise<Context> {
 
 	const git = simpleGit(root)
 
+	const commit = await git.revparse('head')
+
 	const workspaces = await mapWorkspaces({
 		cwd: root,
 		pkg
 	})
 
-	return { manifest, workspaces, git }
+	return { commit, root, manifest, workspaces, git }
+}
+
+function applyChanges(bump: PackageBump) {
+	for(const change of bump.changes) {
+		change(bump.package.packageJson)
+	}
+}
+
+async function createPullRequest(bumps: PackageBumps, { root, commit }: Context) {
+	const octokit = new Octokit({
+		auth: process.env.GITHUB_TOKEN
+	})
+
+	const changes: suggester.Changes = new Map([
+		['.evergiven-manifest.json', {
+			mode: '100644',
+			content: JSON.stringify({
+				lastRelease: commit,
+			}, null, 2)
+		}]
+	])
+
+	for(const [pkg, bump] of Object.entries(bumps)) {
+		applyChanges(bump)
+
+		changes.set(
+			path.join(path.relative(root, bump.package.root), 'package.json'),
+			{
+				mode: '100644',
+				content: JSON.stringify(bump.package.packageJson, null, 2)
+			}
+		)
+	}
+
+	await suggester.createPullRequest(octokit, changes, {
+		title: 'release',
+		message: 'chore: release main',
+		description: 'TODO',
+		branch: 'evergiven-release',
+		upstreamOwner: 'financial-times',
+		upstreamRepo: 'evergiven-test', //TODO
+		fork: false
+	})
 }
 
 async function main() {
@@ -240,7 +292,7 @@ async function main() {
 		{}
 	)
 
-	console.log(bumps)
+	await createPullRequest(bumps, context)
 }
 
 // TODO
