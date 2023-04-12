@@ -218,7 +218,7 @@ async function main() {
 		)
 	)
 
-	const dependencyOrder = toposort(dependencyGraph)
+	const dependencyOrder = toposort.array(Array.from(workspaceDetails.keys()), dependencyGraph)
 
 	const bumps: PackageBumps = dependencyOrder.reduce(
 		(bumps, pkgName) => {
