@@ -13,6 +13,8 @@ const ManifestSchema = z.object({
 	lastRelease: z.string()
 })
 
+type Manifest = z.infer<typeof ManifestSchema>
+
 const enum BumpLevel {
 	NONE = 0,
 	PATCH,
@@ -38,7 +40,9 @@ async function commitsSince(git: SimpleGit, root: string, sha: string) {
 	return all
 }
 
-const commitBumpLevel = (commit: DefaultLogFields & ListLogLine): BumpLevel => {
+type Commit = DefaultLogFields & ListLogLine
+
+const commitBumpLevel = (commit: Commit): BumpLevel => {
 	try {
 		const ast = conventionalCommits.parser(commit.body)
 		const {type, notes} = conventionalCommits.toConventionalChangelogFormat(ast)
@@ -86,6 +90,35 @@ function setDependencyVersionIfPresent(pkg: PackageJson, dependency: string, ver
 	}
 }
 
+type Context = {
+	git: SimpleGit,
+	manifest: Manifest,
+	workspaces: Map<string, string>
+}
+
+type Package = {
+	commits: readonly Commit[],
+	packageJson: PackageJson,
+	workspaceDeps: string[]
+}
+
+async function loadPackage(root: string, {git, manifest, workspaces}: Context): Promise<Package> {
+	const [
+		commits,
+		packageJson
+	] = await Promise.all([
+		commitsSince(git, root, manifest.lastRelease),
+		parsePackageJson(path.resolve(root, 'package.json'))
+	])
+
+	const workspaceDeps = [
+		...Object.keys(packageJson.dependencies ?? {}),
+		...Object.keys(packageJson.devDependencies ?? {})
+	].filter(dep => workspaces.has(dep))
+
+	return { commits, packageJson, workspaceDeps }
+}
+
 async function main() {
 	const root = process.cwd()
 
@@ -101,24 +134,14 @@ async function main() {
 		pkg
 	})
 
+	const context: Context = { manifest, workspaces, git }
+
 	const workspaceDetails = Object.fromEntries(await Promise.all(
 		Array.from(
 			workspaces,
 			async ([ workspaceName, workspaceRoot ]) => {
-				const [
-					commits,
-					workspacePkg
-				] = await Promise.all([
-					commitsSince(git, workspaceRoot, manifest.lastRelease),
-					parsePackageJson(path.resolve(workspaceRoot, 'package.json'))
-				])
-
-				const workspaceDeps = [
-					...Object.keys(workspacePkg.dependencies ?? {}),
-					...Object.keys(workspacePkg.devDependencies ?? {})
-				].filter(dep => workspaces.has(dep))
-
-				return [workspaceName, { workspaceRoot, commits, workspacePkg, workspaceDeps }] as const
+				const packageDetails = await loadPackage(root, context)
+				return [workspaceName, packageDetails] as const
 			}
 		)
 	))
@@ -137,7 +160,7 @@ async function main() {
 		const details = workspaceDetails[pkg]
 
 		if(details) {
-			const { commits, workspacePkg, workspaceDeps } = details
+			const { commits, workspaceDeps } = details
 			const dependenciesBumped = workspaceDeps.some(dep => dep in bumps)
 
 			bumps[pkg] = Math.max(
@@ -147,12 +170,12 @@ async function main() {
 		}
 	}
 
-	const packageActions = Object.fromEntries(Object.entries(workspaceDetails).flatMap(([workspaceName, {workspacePkg}]) => {
+	const packageActions = Object.fromEntries(Object.entries(workspaceDetails).flatMap(([workspaceName, {packageJson}]) => {
 		let bump = bumps[workspaceName]
 
 		if(bump && bump > BumpLevel.NONE) {
 			// TODO reduce level if major is zero
-			const currentVersion = workspacePkg.version!
+			const currentVersion = packageJson.version!
 			const releaseType = formatBumpLevel[bump]
 			const nextVersion = currentVersion && releaseType ? semver.inc(currentVersion, releaseType)! : currentVersion
 
@@ -162,20 +185,20 @@ async function main() {
 		return []
 	}))
 
-	for(const [workspaceName, {workspacePkg, workspaceDeps}] of Object.entries(workspaceDetails)) {
+	for(const [workspaceName, {packageJson, workspaceDeps}] of Object.entries(workspaceDetails)) {
 		const action = packageActions[workspaceName]
 		if(action) {
 			const {nextVersion} = action
-			workspacePkg.version = nextVersion
+			packageJson.version = nextVersion
 
 			for(const dependency of workspaceDeps) {
 				const dependencyAction = packageActions[dependency]
 				if(dependencyAction) {
-					setDependencyVersionIfPresent(workspacePkg, dependency, dependencyAction.nextVersion)
+					setDependencyVersionIfPresent(packageJson, dependency, dependencyAction.nextVersion)
 				}
 			}
 
-			console.log(workspacePkg)
+			console.log(packageJson)
 		}
 	}
 }
