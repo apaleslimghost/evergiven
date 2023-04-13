@@ -3,6 +3,7 @@ import { UsablePackageJson, parsePackageJson } from "./package-json"
 import type { DefaultLogFields, ListLogLine, SimpleGit } from "simple-git"
 import { Context } from "./context"
 import { parser, ConventionalChangelogCommit, toConventionalChangelogFormat } from "@conventional-commits/parser"
+import fs from 'fs/promises'
 
 export type Commit = ConventionalChangelogCommit & { sha: string }
 
@@ -11,6 +12,7 @@ export type Package = {
 	commits: Commit[],
 	packageJson: UsablePackageJson,
 	workspaceDeps: string[]
+	changelog: string
 }
 
 async function commitsSince(git: SimpleGit, root: string, sha?: string) {
@@ -53,14 +55,24 @@ const parseCommit = (rawCommit: DefaultLogFields & ListLogLine): Commit => {
 	}
 }
 
+const emptyChangelog = (pkg: string) => `# \`${pkg}\` changelog
+
+`
+
 export async function loadPackage(root: string, {git, manifest, workspaces}: Context): Promise<Package> {
 	const [
 		rawCommits,
 		packageJson
 	] = await Promise.all([
 		commitsSince(git, root, manifest?.lastRelease),
-		parsePackageJson(path.resolve(root, 'package.json'))
+		parsePackageJson(path.resolve(root, 'package.json')),
 	])
+
+	const changelog = await fs.readFile(
+		path.resolve(root, 'CHANGELOG.md'), 'utf-8'
+	).catch(
+		() => emptyChangelog(packageJson.name)
+	)
 
 	const workspaceDeps = [
 		...Object.keys(packageJson.dependencies ?? {}),
@@ -69,5 +81,5 @@ export async function loadPackage(root: string, {git, manifest, workspaces}: Con
 
 	const commits = rawCommits.map(parseCommit)
 
-	return { root, commits, packageJson, workspaceDeps }
+	return { root, commits, packageJson, workspaceDeps, changelog }
 }

@@ -39,3 +39,7 @@ ${formatCommitChangelog(bump.package.commits).split('\n').map(line => `> ${line}
 export const formatPRChangelog = (bumps: PackageBumps) => `# release
 ${Object.values(bumps).map(formatPRSection).join('\n\n')}
 `
+
+export const formatFileChangelog = (bump: PackageBump) => `## v${bump.nextVersion}
+${formatCommitChangelog(bump.package.commits).replace(/^####/mg, '###')}
+`

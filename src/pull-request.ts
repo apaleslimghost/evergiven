@@ -3,7 +3,7 @@ import { Context } from "./context"
 import { Octokit } from "@octokit/rest";
 import * as suggester from 'code-suggester'
 import path from "path";
-import { formatPRChangelog } from "./changelog";
+import { formatFileChangelog, formatPRChangelog } from "./changelog";
 import parseGithubUrl from 'parse-github-url'
 
 function applyChanges(bump: PackageBump) {
@@ -36,6 +36,21 @@ export async function createPullRequest(bumps: PackageBumps, { git, root, commit
 				content: JSON.stringify(bump.package.packageJson, null, 2)
 			}
 		)
+
+		const changelog = bump.package.changelog
+		const lines = changelog.split('\n')
+
+		changes.set(
+			path.join(path.relative(root, bump.package.root), 'CHANGELOG.md'),
+			{
+				mode: '100644',
+				content: [
+					...lines.slice(0, 2),
+					formatFileChangelog(bump),
+					...lines.slice(2)
+				].join('\n')
+			}
+		)
 	}
 
 	const origin = await git.remote(['get-url', 'origin'])
@@ -48,7 +63,7 @@ export async function createPullRequest(bumps: PackageBumps, { git, root, commit
 		throw new Error(`could not parse origin URL ${origin}`)
 	}
 
-	const { owner, repo } = parsed
+	const { owner, name: repo } = parsed
 	if(!owner || !repo) {
 		throw new Error(`couldn't parse owner/repo from ${origin}`)
 	}
