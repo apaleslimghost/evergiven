@@ -66,7 +66,6 @@ async function main() {
 }
 
 // TODO
-// generating the changelog
 // creating releases on merge
 // overriding commit types for commit SHAs in manifest, deleting them when they've been used
 // CLI args?
