@@ -3,6 +3,7 @@ import { Context } from "./context"
 import { Octokit } from "@octokit/rest";
 import * as suggester from 'code-suggester'
 import path from "path";
+import { formatPRChangelog } from "./changelog";
 
 function applyChanges(bump: PackageBump) {
 	for(const change of bump.changes) {
@@ -36,13 +37,39 @@ export async function createPullRequest(bumps: PackageBumps, { root, commit }: C
 		)
 	}
 
-	await suggester.createPullRequest(octokit, changes, {
-		title: 'release',
-		message: 'chore: release main',
-		description: 'TODO',
-		branch: 'evergiven-release',
-		upstreamOwner: 'financial-times',
-		upstreamRepo: 'evergiven-test', //TODO
-		fork: false
+	// TODO
+	const owner = 'Financial-Times'
+	const repo = 'evergiven-test'
+	const branch = 'evergiven-release'
+
+	const { data: pulls } = await octokit.pulls.list({
+		owner,
+		repo
 	})
+
+	const existingPr = pulls.find(pr => pr.head.label === `${owner}:${branch}`)
+
+	const title = 'release'
+	const body = formatPRChangelog(bumps)
+
+	const prNumber = await suggester.createPullRequest(octokit, changes, {
+		title,
+		message: 'chore: release main',
+		description: body,
+		branch,
+		upstreamOwner: owner,
+		upstreamRepo: repo,
+		fork: false,
+		force: true
+	})
+
+	if(existingPr) {
+		await octokit.pulls.update({
+			owner,
+			repo,
+			pull_number: existingPr.number,
+			title,
+			body
+		})
+	}
 }
