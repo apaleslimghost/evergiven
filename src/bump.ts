@@ -1,7 +1,6 @@
 import type { PackageJson } from "@npmcli/package-json";
 import type { ReleaseType } from "semver"
 import semver from 'semver'
-import * as conventionalCommits from "@conventional-commits/parser";
 
 import { Commit, Package } from "./package"
 
@@ -30,24 +29,17 @@ const formatBumpLevel: Record<BumpLevel, ReleaseType | undefined> = {
 	[BumpLevel.MAJOR]: 'major',
 }
 
-const commitBumpLevel = (commit: Commit): BumpLevel => {
-	try {
-		const ast = conventionalCommits.parser(commit.body)
-		const {type, notes} = conventionalCommits.toConventionalChangelogFormat(ast)
+const commitBumpLevel = ({notes, type}: Commit): BumpLevel => {
+	if(notes.length && notes.some(note => note.title === 'BREAKING CHANGE')) {
+		return BumpLevel.MAJOR
+	}
 
-		if(notes.length && notes.some(note => note.title === 'BREAKING CHANGE')) {
-			return BumpLevel.MAJOR
-		}
+	if(type === 'feat') {
+		return BumpLevel.MINOR
+	}
 
-		if(type === 'feat') {
-			return BumpLevel.MINOR
-		}
-
-		if(type === 'fix') {
-			return BumpLevel.PATCH
-		}
-	} catch(error) {
-		// console.log({error, commit})
+	if(type === 'fix') {
+		return BumpLevel.PATCH
 	}
 
 	return BumpLevel.NONE

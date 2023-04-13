@@ -2,12 +2,13 @@ import path from "path"
 import { UsablePackageJson, parsePackageJson } from "./package-json"
 import type { DefaultLogFields, ListLogLine, SimpleGit } from "simple-git"
 import { Context } from "./context"
+import { parser, ConventionalChangelogCommit, toConventionalChangelogFormat } from "@conventional-commits/parser"
 
-export type Commit = DefaultLogFields & ListLogLine
+export type Commit = ConventionalChangelogCommit & { sha: string }
 
 export type Package = {
 	root: string,
-	commits: readonly Commit[],
+	commits: Commit[],
 	packageJson: UsablePackageJson,
 	workspaceDeps: string[]
 }
@@ -23,9 +24,38 @@ async function commitsSince(git: SimpleGit, root: string, sha?: string) {
 	return all
 }
 
+const parseCommit = (rawCommit: DefaultLogFields & ListLogLine): Commit => {
+	try {
+		const ast = parser(rawCommit.body)
+		return {
+			...toConventionalChangelogFormat(ast),
+			sha: rawCommit.hash
+		}
+	} catch(error) {
+		if(rawCommit.message.startsWith('Merge ')) {
+			return {
+				sha: rawCommit.hash,
+				type: 'merge',
+				subject: rawCommit.message,
+				header: rawCommit.message,
+				body: rawCommit.body,
+				merge: true,
+				notes: [],
+				references: [],
+				mentions: [],
+				revert: false,
+				footer: null,
+				scope: null,
+			}
+		}
+
+		throw error
+	}
+}
+
 export async function loadPackage(root: string, {git, manifest, workspaces}: Context): Promise<Package> {
 	const [
-		commits,
+		rawCommits,
 		packageJson
 	] = await Promise.all([
 		commitsSince(git, root, manifest?.lastRelease),
@@ -36,6 +66,8 @@ export async function loadPackage(root: string, {git, manifest, workspaces}: Con
 		...Object.keys(packageJson.dependencies ?? {}),
 		...Object.keys(packageJson.devDependencies ?? {})
 	].filter(dep => workspaces.has(dep))
+
+	const commits = rawCommits.map(parseCommit)
 
 	return { root, commits, packageJson, workspaceDeps }
 }

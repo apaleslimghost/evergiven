@@ -62,7 +62,7 @@ async function main() {
 		{}
 	)
 
-	await createPullRequest(bumps, context)
+	// await createPullRequest(bumps, context)
 }
 
 // TODO
